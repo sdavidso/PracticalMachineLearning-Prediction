@@ -1,0 +1,95 @@
+---
+title: "Practical Machine Learning, Prediction Assignment"
+author: "Solomon Davidsohn"
+date: "Sunday, August 24, 2014"
+output:
+  html_document:
+    keep_md: yes
+---
+
+##Intro
+
+Using data from accelerometers, 6 participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. In this analysis, we attempt to predict in which way the participants perform the exercise using a data model. In this analysis, we split the data  and use it to create a model using the random forests method, and use an independent data set to check the validity of the model by cross-validation.  
+
+More information: http://groupware.les.inf.puc-rio.br/har
+
+##Analysis
+
+###Download the files
+We download the files for our training and testing set and parse them into data frames.
+
+```{r, warning=FALSE}
+urltrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urltest <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+download.file(urltrain,"pml-training.csv")
+download.file(urltest,"pml-testing.csv")
+
+traindata <- read.csv("pml-training.csv",stringsAsFactors= FALSE,na.strings=c("NA",""))
+testdata <- read.csv("pml-testing.csv", stringsAsFactors=FALSE,na.strings=c("NA",""))
+
+```
+
+###Data Processing
+
+Here we remove the variables with a large amount of missing data.
+
+```{r, warning=FALSE}
+library(caret)
+library(ggplot2)
+
+set.seed(300)
+
+#this function finds variables with more than 90% NA's
+significantNA <- function(x){
+    natable <- table(is.na(x))
+    action <- (natable["TRUE"] > natable["FALSE"]*10) #if over 90% of values are NA then return true
+    if(is.na(action)) return(FALSE)
+    else return(unname(action))
+}
+
+listOfSignificantNA <- sapply(traindata,significantNA)
+traindataclean <- traindata[,!listOfSignificantNA]
+
+traindataclean$classe <- as.factor(traindataclean$classe)
+```
+
+Then, we partition our training data into 80% and 20%. The 20% will be used for cross-validation to check the accuracy of our model.
+
+```{r, warning=FALSE}
+inTrain <- createDataPartition(y=traindataclean$classe,
+                               p=0.80, list=FALSE)
+train <- traindataclean[inTrain,]
+validate <- traindataclean[-inTrain,] #validation
+```
+
+###Creating a model
+
+Here, we create a model using random forests. The training set is subset from 8:60, using the outcome and including only measurements as the predictors.
+
+```{r, warning=FALSE}
+#create a model using random forests
+library(randomForest)
+forestfit <- randomForest(classe~.,data=train[,8:60]) #8:59 are the measurements, 60 is the classe
+
+```
+
+###Cross-validation
+
+For our model, I expect high accuracy nearing 1 (100%) because of the large amount of data and variables to predict the outcome. Using the validation data saved for cross-validation, we predict the values on the model and create a confusion matrix to compare values and find the accuracy.
+
+```{r, warning=FALSE}
+cm1 <- predict(forestfit,validate)
+confusionMatrix(validate$classe,cm1)
+
+```
+This model has a .998 accuracy on our validation set which is very good. I accept the model and use it to predict the test set.
+
+##Results
+
+Finally, we enter the test data into the model, and produce the predictions for that data.
+
+```{r, warning=FALSE}
+testpredictions <- predict(forestfit, testdata)
+testpredictions
+```
